@@ -17,8 +17,7 @@
 # Please contact Eucalyptus Systems, Inc., 6750 Navigator Way, Goleta
 # CA 93117, USA or visit http://www.eucalyptus.com/licenses/ if you need
 # additional information or have any questions.
-
-
+import os
 import argparse
 import copy
 import glob
@@ -26,6 +25,7 @@ import re
 import subprocess
 import sys
 import boto
+import fcntl
 import rpm
 from esitoolsupport.esibase import EsiBase
 
@@ -95,11 +95,21 @@ class ServiceImageManager(EsiBase):
     def _run_command(self, command, debug=False):
         if debug:
             command.append('--debug')
-        pipe = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        pipe.wait()
-        stdout = pipe.stdout.read()
-        stderr = pipe.stderr.read()
-        if pipe.returncode > 0:
+        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if debug:
+                fd = process.stderr
+                fl = fcntl.fcntl(fd, fcntl.F_GETFL)
+                fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
+        while process.poll() is None:
+            if debug:
+                try:
+                    line = process.stderr.readline()
+                    print line.strip()
+                except:
+                    pass
+        stderr = process.stderr.read() if not debug else "SEE OUTPUT ABOVE"
+        stdout = process.stdout.read()
+        if process.returncode > 0:
             print "Error: Unable to install imaging worker due to:\n" \
                   + stdout + stderr
             sys.exit(1)
